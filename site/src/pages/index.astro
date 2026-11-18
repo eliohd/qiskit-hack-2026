@@ -17,7 +17,25 @@ const compile = csv('compile_study.csv');
 const layout = csv('layout_study.csv');
 const noisy = csv('pes_noisy_sim.csv');
 const budget = csv('error_budget.csv');
-const hardware = csv('hardware_pes.csv');
+// Real-device results if they exist, otherwise the 32768-shot dry run of the same job on FakeFez
+const realHw = csv('hardware_pes.csv');
+const hw = realHw.length ? realHw : csv('hardware_dry_run.csv');
+const hwLabel = realHw.length ? 'hardware' : 'dry run';
+const ms = (v: number) => 1e3 * Math.abs(v);
+const bRow = (prefix: string) => budget.find((r) => String(r.source).startsWith(prefix));
+const budgetBars = [
+  { label: 'Basis set (STO-3G → 6-31G)', key: 'Basis', col: 'noisy_sim_Ha', color: C.raw },
+  { label: 'Gate + readout noise (dry run)', key: 'Gate', col: 'dry_run_Ha', color: C.alt },
+  { label: 'Gate noise (simulation)', key: 'Gate', col: 'noisy_sim_Ha', color: C.alt },
+  { label: 'After ZNE (dry run)', key: 'Residual', col: 'dry_run_Ha', color: C.zne },
+  { label: 'Shot noise (32,768 shots)', key: 'Shot', col: 'dry_run_Ha', color: C.hf },
+  { label: 'After ZNE (simulation)', key: 'Residual', col: 'noisy_sim_Ha', color: C.zne },
+  { label: 'VQE algorithm', key: 'Ansatz', col: 'noisy_sim_Ha', color: C.exact },
+].flatMap((b) => {
+  const r = bRow(b.key);
+  const v = r ? ms(num(r, b.col)) : NaN;
+  return Number.isFinite(v) && v > 0 ? [{ label: b.label, value: v, color: b.color }] : [];
+});
 
 const pts = (rows: typeof pes, x: string, y: string, k = 1) => rows.map((r) => [num(r, x), k * num(r, y)] as [number, number]);
 const maxVqeErr = Math.max(...pes.map((r) => num(r, 'vqe_err')));
@@ -169,30 +187,31 @@ const icpt = mean(zy) - slope * mean(scales);
           hRefs={[{ value: CHEM, label: 'chemical accuracy' }]} />
       </Section>
 
-      <Section id="hardware" n="7" title="Real quantum hardware"
-        lede="All distances and noise levels go to the device as one job, with dynamical decoupling, Pauli twirling and readout correction switched on, then our own ZNE on top."
-        codeTitle="One-job hardware submission" source={code('import json')}>
-        {hardware.length ? (
-          <Chart title="Hardware error" xLabel="He–H distance (Å)" yLabel="error (mHa)" height={240}
+      <Section id="hardware" n="7" title="Ready for real hardware"
+        lede="The whole IBM job is built: 3 distances × 3 noise levels in one submission, 32,768 shots each. We did not get real-QPU time, so we ran the identical job on the fake device with real measurements. That adds two things the exact-average simulation hides: readout error and shot noise."
+        codeTitle="The full job, dry-run on FakeFez" source={code('import json')}>
+        {hw.length > 0 && (
+          <Chart title={`${hwLabel} error with shot-noise error bars`} xLabel="He–H distance (Å)" yLabel="error vs exact (mHa)" height={260}
             series={[
-              { name: 'hardware raw', points: hardware.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_raw') - num(r, 'exact'))] as [number, number]), color: C.raw, kind: 'both' },
-              { name: 'hardware + ZNE', points: hardware.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_zne_linear') - num(r, 'exact'))] as [number, number]), color: C.zne, kind: 'both' },
+              { name: `${hwLabel} raw`, points: hw.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_raw') - num(r, 'exact'))] as [number, number]),
+                err: hw.map((r) => 1e3 * num(r, 'hw_raw_std')), color: C.raw, kind: 'dots', dx: -5 },
+              { name: `${hwLabel} + ZNE`, points: hw.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_zne_linear') - num(r, 'exact'))] as [number, number]),
+                err: hw.map((r) => 1e3 * num(r, 'hw_zne_linear_std')), color: C.zne, kind: 'dots', dx: 5 },
+              { name: 'gate noise only + ZNE (Section 6)', points: noisy.filter((r) => hw.some((h) => num(h, 'distance_A') === num(r, 'distance_A'))).map((r) => [num(r, 'distance_A'), 1e3 * num(r, 'zne_linear_err')] as [number, number]), color: C.exact, kind: 'dash' },
             ]}
-            hRefs={[{ value: CHEM, label: 'chemical accuracy' }]} />
-        ) : (
-          <div class="callout"><b>Results pending.</b> The pipeline is validated end-to-end in a local dry run; the device numbers land in the notebook when the job returns.</div>
+            hRefs={[{ value: CHEM, label: 'chemical accuracy' }, { value: 0, label: 'exact', color: 'var(--ink-faint)' }]} />
         )}
+        <ul class="facts">
+          <li><b>Readout error adds ~3 mHa</b>, and ZNE can't remove it: folding amplifies gate noise, not measurement errors. On a real device TREX readout mitigation is designed to handle that part.</li>
+          <li><b>Shot noise sets the error bars</b> (±2–6 mHa). Confirming chemical accuracy at equilibrium would need ~12× more shots.</li>
+          <li><b>One command away:</b> <code>RUN_HARDWARE = True</code> submits the identical job to <code>ibm_fez</code>.</li>
+        </ul>
       </Section>
 
       <Section id="budget" n="8" title="Where the error comes from"
-        lede="Every error source at the equilibrium distance, side by side on a log scale. The algorithm is essentially perfect; noise costs a few mHa; the small basis costs far more than everything else together."
+        lede="Every error source at the equilibrium distance, side by side on a log scale. The algorithm is essentially perfect; noise and shot noise cost a few mHa each; the small basis costs more than everything else together."
         codeTitle="Error budget from results/*.csv" source={code('# ---- Error budget')}>
-        <Bars title="Error budget at equilibrium" unit="mHa" log ref={{ value: CHEM, label: 'chemical accuracy (1.6 mHa)' }}
-          bars={budget.flatMap((r) => {
-            const v = Math.abs(num(r, 'simulator_Ha')) || Math.abs(num(r, 'hardware_Ha'));
-            return Number.isFinite(v) && v > 0 ? [{ label: String(r.source).replace(/\s*\(.*\)$/, ''), value: 1e3 * v,
-              color: String(r.source).startsWith('Basis') ? C.raw : String(r.source).startsWith('Ansatz') ? C.exact : C.alt }] : [];
-          })} />
+        <Bars title="Error budget at equilibrium" unit="mHa" log ref={{ value: CHEM, label: 'chemical accuracy (1.6 mHa)' }} bars={budgetBars} />
       </Section>
 
       <section class="outro wrap" data-reveal>
@@ -201,15 +220,15 @@ const icpt = mean(zy) - slope * mean(scales);
         <ol>
           <li><b>Symmetry first.</b> Removing two known qubits turned 45 two-qubit gates into 2, the difference between 121 mHa and 7.7 mHa of error.</li>
           <li><b>VQE is exact when noiseless</b>, so the basis set, not the algorithm, limits accuracy.</li>
-          <li><b>Mitigation works, partly.</b> A good qubit choice and ZNE bring noise to 1.4–2.6 mHa, near chemical accuracy.</li>
-          <li><b>Shot noise is the next wall.</b> Optimising on hardware would need noise-robust optimisers such as SPSA and many more shots.</li>
+          <li><b>Mitigation works, partly.</b> A good qubit choice and ZNE bring gate noise to 1.4–2.6 mHa, near chemical accuracy. Readout error (~3 mHa) needs its own fix.</li>
+          <li><b>Shot noise is the next wall.</b> At 32,768 shots one energy wobbles by ~4.5 mHa; optimising on hardware would also need noise-robust optimisers such as SPSA.</li>
         </ol>
         <p><a class="btn" href={NOTEBOOK}>Read the full notebook</a> <a class="btn ghost" href={REPO}>Source on GitHub</a></p>
       </section>
     </main>
 
     <footer class="wrap foot">
-      Built on B. Tirado's <em>Ground-State Energy of a Molecule with VQE</em> tutorial (BasQ Qiskit Fall Fest 2026). Charts are drawn from the notebook's <code>results/*.csv</code>.
+      Elio Haddad (algorithm &amp; physics) · Mohamed Alzaabi (hardware &amp; noise). Built on B. Tirado's <em>Ground-State Energy of a Molecule with VQE</em> tutorial (BasQ Qiskit Fall Fest 2026). Charts are drawn from the notebook's <code>results/*.csv</code>.
     </footer>
 
     <script>

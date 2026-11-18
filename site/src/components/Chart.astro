@@ -5,6 +5,8 @@ type Series = {
   points: [number, number][];
   color: string;
   kind?: 'line' | 'dots' | 'dash' | 'both';
+  err?: number[]; // symmetric error bars, same units as y
+  dx?: number; // small horizontal offset so overlapping series stay readable
 };
 type Ref = { value: number; label: string; color?: string };
 interface Props {
@@ -25,7 +27,9 @@ const { series, xLabel, yLabel, logY = false, hRefs = [], vRefs = [], height = 3
 const W = 560, H = height, L = 64, R = 16, T = 16, B = 44;
 const f = (y: number) => (logY ? Math.log10(y) : y);
 const xs = series.flatMap((s) => s.points.map((p) => p[0])).concat(vRefs.map((r) => r.value));
-const ys = series.flatMap((s) => s.points.map((p) => f(p[1]))).concat(hRefs.map((r) => f(r.value)));
+const ys = series
+  .flatMap((s) => s.points.flatMap((p, i) => (s.err ? [f(p[1] - s.err[i]), f(p[1] + s.err[i])] : [f(p[1])])))
+  .concat(hRefs.map((r) => f(r.value)));
 const x0 = Astro.props.xMin ?? Math.min(...xs), x1 = Math.max(...xs);
 let y0 = Astro.props.yMin !== undefined ? f(Astro.props.yMin) : Math.min(...ys);
 let y1 = Astro.props.yMax !== undefined ? f(Astro.props.yMax) : Math.max(...ys);
@@ -78,7 +82,14 @@ const path = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${s
         {(s.kind ?? 'line') !== 'dots' && (
           <path d={path(s.points)} fill="none" stroke={s.color} stroke-width="2.2" stroke-dasharray={s.kind === 'dash' ? '6 5' : undefined} />
         )}
-        {(s.kind === 'dots' || s.kind === 'both') && s.points.map((p) => <circle cx={sx(p[0])} cy={sy(p[1])} r="4.5" fill={s.color} stroke="var(--card)" stroke-width="1.5" />)}
+        {s.err && s.points.map((p, i) => (
+          <g stroke={s.color} stroke-width="1.5">
+            <line x1={sx(p[0]) + (s.dx ?? 0)} x2={sx(p[0]) + (s.dx ?? 0)} y1={sy(p[1] - s.err![i])} y2={sy(p[1] + s.err![i])} />
+            <line x1={sx(p[0]) + (s.dx ?? 0) - 4} x2={sx(p[0]) + (s.dx ?? 0) + 4} y1={sy(p[1] - s.err![i])} y2={sy(p[1] - s.err![i])} />
+            <line x1={sx(p[0]) + (s.dx ?? 0) - 4} x2={sx(p[0]) + (s.dx ?? 0) + 4} y1={sy(p[1] + s.err![i])} y2={sy(p[1] + s.err![i])} />
+          </g>
+        ))}
+        {(s.kind === 'dots' || s.kind === 'both') && s.points.map((p) => <circle cx={sx(p[0]) + (s.dx ?? 0)} cy={sy(p[1])} r="4.5" fill={s.color} stroke="var(--card)" stroke-width="1.5" />)}
       </g>
     ))}
   </svg>
