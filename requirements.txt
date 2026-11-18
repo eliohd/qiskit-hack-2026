@@ -1,0 +1,19 @@
+# Versions pinned to a set known to work together for the tutorial notebook.
+qiskit==2.6.2
+qiskit-aer==0.17.1
+qiskit-ibm-runtime==0.40.1
+ibm-platform-services>=0.66  # older versions fail to build from source
+qiskit-nature==0.8.0
+qiskit-algorithms==0.4.0
+pyscf==2.15.0  # last release with wheels for BOTH macOS arm64 and Windows
+numpy>=2.0,<3
+scipy>=1.14
+matplotlib>=3.8
+pylatexenc>=2.10
+pandas>=2.0
+
+# Notebook tooling + git hygiene for notebooks
+jupyterlab
+ipykernel
+nbstripout
+nbdime

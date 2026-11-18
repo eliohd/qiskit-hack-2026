@@ -1,0 +1,9 @@
+# Normalise line endings (one of us is on Windows, one on macOS)
+* text=auto eol=lf
+*.png binary
+*.bat text eol=crlf
+
+# Strip notebook outputs on commit (needs `nbstripout --install` once per clone)
+*.ipynb filter=nbstripout
+# Notebook-aware diffs/merges (needs `nbdime config-git --enable` once per clone)
+*.ipynb diff=jupyternotebook merge=jupyternotebook
