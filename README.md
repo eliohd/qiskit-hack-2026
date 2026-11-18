@@ -7,9 +7,10 @@ Potential energy surface (PES) of the **HeH⁺** molecular ion with VQE: sweep t
 ```
 challenge_1_tutorial.ipynb   original H2 tutorial (reference, don't edit)
 beginner/
-  pes_tools.py               shared helpers: build_problem, hf_energy, exact_energy, vqe_energy
+  submission.ipynb           THE deliverable: sections mapped to judging criteria, owners, timeboxes
+  pes_tools.py               chemistry helpers: build_problem, hf_energy, exact_energy, vqe_energy
+  hardware_tools.py          qubit tapering, transpile/layout study, noisy sim, ZNE, Runtime estimator
   check_setup.py             run once to confirm your environment works
-  heh_plus_pes.ipynb         the challenge notebook (sections 1-6, TODOs inside)
   results/                   CSVs of computed curves (committed)
   figures/                   PNG plots (committed)
 requirements.txt             pinned, tested versions
@@ -62,16 +63,17 @@ Notebooks are JSON, so two people editing the same one produces painful conflict
 - All energies in `pes_tools.py` are **total** energies (electronic + nuclear repulsion), in Hartree.
 - Chemical accuracy is 1.6 × 10⁻³ Ha ≈ 1 kcal/mol (`CHEMICAL_ACCURACY` in `pes_tools.py`).
 
-## Task split
+## Roles (2-hour sprint)
 
-| Section | Who | Status |
-|---|---|---|
-| 1. Sweep and grid choice | | |
-| 2. Plot | | |
-| 3. Equilibrium bond length | | |
-| 4. Dissociation products and energy | | |
-| 5. Ansatz accuracy along the curve | | |
-| 6. Conclusions and write-up | | |
+The full timeline is at the top of `submission.ipynb`.
+
+- **A: algorithm & physics** owns §1–§4: encodings, the classical cross-check, the noiseless PES, equilibrium and dissociation, and the larger basis and ansatz study. A also writes §8.
+- **B: hardware & noise** owns §5–§7: the transpile and layout study, noisy simulation and ZNE, and the real-hardware run. **B submits the hardware job by about 0:45.**
+- **Both** write §8–§9 and the abstract together, then do a final Restart & Run All.
+
+Only edit cells in your own sections, and experiment in `beginner/scratch_<name>.ipynb`. With the nbdime merge driver enabled, edits to different cells merge cleanly.
+
+**Before submitting:** run the notebook top to bottom and keep its outputs. Add `beginner/submission.ipynb -filter` to `.gitattributes` so the outputs survive commit, then export a copy with `jupyter nbconvert --to html beginner/submission.ipynb`.
 
 ## Credits
 
