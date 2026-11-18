@@ -67,9 +67,9 @@ Notebooks are JSON, so two people editing the same one produces painful conflict
 
 The full timeline is at the top of `submission.ipynb`.
 
-- **A: algorithm & physics** owns §1–§4: encodings, the classical cross-check, the noiseless PES, equilibrium and dissociation, and the larger basis and ansatz study. A also writes §8.
-- **B: hardware & noise** owns §5–§7: the transpile and layout study, noisy simulation and ZNE, and the real-hardware run. **B submits the hardware job by about 0:45.**
-- **Both** write §8–§9 and the abstract together, then do a final Restart & Run All.
+- **A: algorithm & physics** owns Sections 1–4: encodings, the classical cross-check, the noiseless PES, equilibrium and dissociation, and the larger basis and ansatz study. A also writes Section 8.
+- **B: hardware & noise** owns Sections 5–7: the transpile and layout study, noisy simulation and ZNE, and the real-hardware run. **B submits the hardware job by about 0:45.**
+- **Both** write Sections 8–9 and the abstract together, then do a final Restart & Run All.
 
 Only edit cells in your own sections, and experiment in `beginner/scratch_<name>.ipynb`. With the nbdime merge driver enabled, edits to different cells merge cleanly.
 
