@@ -1,0 +1,20 @@
+---
+// One notebook section: explanation and visuals on the left, the notebook's own code on the right.
+import { Code } from 'astro:components';
+interface Props { id: string; n: string; title: string; lede: string; source: string; codeTitle: string }
+const { id, n, title, lede, source, codeTitle } = Astro.props;
+---
+<section class="sec" id={id}>
+  <div class="sec-visual" data-reveal>
+    <p class="eyebrow">Section {n}</p>
+    <h2>{title}</h2>
+    <p class="lede">{lede}</p>
+    <slot />
+  </div>
+  <aside class="sec-code" data-reveal>
+    <details open>
+      <summary><span>{codeTitle}</span><span class="mono">python · from the notebook</span></summary>
+      <div class="code-scroll"><Code code={source} lang="python" theme="github-light" /></div>
+    </details>
+  </aside>
+</section>

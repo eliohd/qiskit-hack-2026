@@ -1,0 +1,220 @@
+---
+import '../styles/site.css';
+import Section from '../components/Section.astro';
+import Chart from '../components/Chart.astro';
+import Bars from '../components/Bars.astro';
+import { csv, code, num } from '../lib/data';
+
+const REPO = 'https://github.com/eliohd/qiskit-hack-2026';
+const NOTEBOOK = `${REPO}/blob/main/beginner/submission.ipynb`;
+const CHEM = 1.6; // mHa
+const C = { hf: '#9a9187', exact: '#1f7a4a', vqe: '#437c90', raw: '#b4322d', zne: '#437c90', alt: '#c08a2e' };
+
+const pes = csv('pes_noiseless_sto3g.csv');
+const ladder = csv('basis_ladder_fci.csv');
+const opt = csv('optimizer_comparison.csv');
+const compile = csv('compile_study.csv');
+const layout = csv('layout_study.csv');
+const noisy = csv('pes_noisy_sim.csv');
+const budget = csv('error_budget.csv');
+const hardware = csv('hardware_pes.csv');
+
+const pts = (rows: typeof pes, x: string, y: string, k = 1) => rows.map((r) => [num(r, x), k * num(r, y)] as [number, number]);
+const maxVqeErr = Math.max(...pes.map((r) => num(r, 'vqe_err')));
+const sto = ladder.find((r) => r.basis === 'sto3g')!;
+const qz = ladder.find((r) => r.basis === 'cc-pvqz')!;
+const gates = (enc: string) => Math.min(...compile.filter((r) => r.encoding === enc).map((r) => num(r, 'two_qubit_gates')));
+const eq = noisy.find((r) => num(r, 'distance_A') === 0.774)!;
+const zneErr = (r: (typeof noisy)[number]) => 1e3 * num(r, 'zne_linear_err');
+
+const worstNoisy = (name: string) => 1e3 * Math.max(...opt.filter((r) => r.optimizer === name && num(r, 'sigma_Ha') > 0).map((r) => num(r, 'true_err')));
+const BASIS_NAMES: Record<string, string> = { sto3g: 'STO-3G', '6-31g': '6-31G', '6-31g**': '6-31G**', 'cc-pvdz': 'cc-pVDZ', 'cc-pvtz': 'cc-pVTZ', 'cc-pvqz': 'cc-pVQZ' };
+
+// ZNE at equilibrium: energies relative to exact, in mHa, and the straight-line fit back to zero noise
+const scales = [1, 3, 5];
+const zy = scales.map((s) => 1e3 * (num(eq, `scale_${s}`) - num(eq, 'exact')));
+const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+const slope = scales.reduce((acc, s, i) => acc + (s - mean(scales)) * (zy[i] - mean(zy)), 0) / scales.reduce((acc, s) => acc + (s - mean(scales)) ** 2, 0);
+const icpt = mean(zy) - slope * mean(scales);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HeH⁺ on a quantum computer</title>
+    <meta name="description" content="A visual companion to our BasQ Qiskit Fall Fest 2026 notebook: the HeH⁺ potential energy surface from exact references to noisy quantum hardware." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <header class="top wrap">
+      <a href="#" class="wordmark">HeH⁺ <span>PES</span></a>
+      <nav>
+        <a href="#encoding">Qubits</a><a href="#pes">Curve</a><a href="#basis">Basis</a><a href="#noise">Noise</a><a href="#budget">Budget</a>
+        <a class="btn" href={NOTEBOOK}>Notebook</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero wrap" data-reveal>
+        <p class="eyebrow">BasQ Qiskit Fall Fest 2026 · Challenge 1 · Beginner track</p>
+        <h1>The simplest molecule with a <em>lopsided</em> bond, from exact maths to a noisy quantum chip.</h1>
+        <p class="lede">
+          HeH⁺ is a helium atom and a proton sharing two electrons. We trace its energy as the two nuclei are pulled apart,
+          using the variational quantum eigensolver (VQE), and check every step: exact references, a noiseless quantum
+          simulation, a realistic noisy one, and real hardware. This page is a short visual tour; the notebook has the full story.
+        </p>
+        <div class="tiles">
+          <div class="tile"><b>4 → 2</b><span>qubits after removing symmetries, with no loss of accuracy</span></div>
+          <div class="tile"><b>{(maxVqeErr * 1e7).toFixed(0)}×10⁻⁷ Ha</b><span>worst noiseless VQE error, 5000× below chemical accuracy</span></div>
+          <div class="tile"><b>{gates('jw')} → {gates('tapered')}</b><span>two-qubit gates on an IBM Heron chip</span></div>
+          <div class="tile"><b>{zneErr(eq).toFixed(1)} mHa</b><span>noisy error at equilibrium after zero-noise extrapolation</span></div>
+        </div>
+        <p class="hint">Visuals on the left, the exact notebook code on the right. <span class="muted">1 Ha (Hartree) ≈ 27.2 eV; chemical accuracy = 1.6 mHa.</span></p>
+      </section>
+
+      <Section id="encoding" n="1" title="Two qubits are enough"
+        lede="Two electrons in two orbitals, each with a spin-up and a spin-down slot, is 4 qubits. But the number of spin-up and spin-down electrons never changes, so two qubits only ever store values we already know. We delete them."
+        codeTitle="Compare three encodings" source={code('problem = build_problem(0.774)')}>
+        <figure class="qubits" aria-label="Four qubits reduced to two">
+          <svg viewBox="0 0 520 150">
+            {['↑ orbital 1', '↑ orbital 2', '↓ orbital 1', '↓ orbital 2'].map((l, i) => (
+              <g><circle cx={50 + i * 62} cy="60" r="22" class="q" /><text x={50 + i * 62} y="105" class="ql">{l}</text></g>
+            ))}
+            <path d="M300 60 h60" class="arrow" /><path d="M352 52 l10 8 -10 8" class="arrow" />
+            <text x="330" y="45" class="ql">tapering</text>
+            <g><circle cx="410" cy="60" r="22" class="q on" /><text x="410" y="105" class="ql">qubit A</text></g>
+            <g><circle cx="472" cy="60" r="22" class="q on" /><text x="472" y="105" class="ql">qubit B</text></g>
+            <text x="260" y="140" class="ql faint">the deleted qubits stored "1 spin-up electron" and "2 electrons in total": always true</text>
+          </svg>
+        </figure>
+        <ul class="facts">
+          <li><b>27 → 9</b> Pauli terms to measure, same exact energy.</li>
+          <li><b>H₂ goes to 1 qubit, HeH⁺ stops at 2.</b> H₂ is symmetric (two identical atoms), which is one more symmetry to remove. HeH⁺ is not.</li>
+        </ul>
+      </Section>
+
+      <Section id="validation" n="2" title="Trust, but verify"
+        lede="Before believing any quantum number, we compared Qiskit's exact answer with an independent chemistry code (PySCF) at every distance. They agree to 10⁻¹⁵ Ha. We also caught a trap from the tutorial."
+        codeTitle="Independent FCI cross-check" source={code('from pyscf import gto')}>
+        <div class="callout bad">
+          <b>The trap:</b> an unfiltered solver searches states with any number of electrons. For HeH⁺ it returns
+          a <b>3-electron</b> state, 0.164 Ha too low. We filter on electron number and spin.
+        </div>
+        <div class="callout ok"><b>Agreement:</b> PySCF FCI vs Qiskit (2-qubit) at all 14 distances: ≤ 3×10⁻¹⁵ Ha.</div>
+      </Section>
+
+      <Section id="pes" n="3" title="The energy curve"
+        lede="Squeeze the nuclei and they repel; pull them apart and the bond breaks. The lowest point is the bond length. VQE (dots) lands exactly on the exact curve everywhere; Hartree-Fock, which ignores how electrons dodge each other, sits slightly above."
+        codeTitle="VQE sweep over distances" source={code('rows, prev = [], None')}>
+        <Chart title="HeH+ potential energy curve in STO-3G" xLabel="He–H distance (Å)" yLabel="Energy (Ha)"
+          series={[
+            { name: 'Hartree-Fock', points: pts(pes, 'distance_A', 'hf'), color: C.hf, kind: 'dash' },
+            { name: 'Exact', points: pts(pes, 'distance_A', 'exact'), color: C.exact },
+            { name: 'VQE (2 qubits)', points: pts(pes, 'distance_A', 'vqe'), color: C.vqe, kind: 'dots' },
+          ]}
+          vRefs={[{ value: num(sto, 'r_eq_A'), label: `minimum ${num(sto, 'r_eq_A').toFixed(3)} Å` }]} />
+        <ul class="facts">
+          <li><b>Breaks into He + H⁺:</b> helium holds its electrons far more tightly than hydrogen does.</li>
+          <li><b>Bond energy {num(sto, 'D_e_eV').toFixed(2)} eV</b> in this small basis (real value 2.04 eV).</li>
+        </ul>
+      </Section>
+
+      <Section id="basis" n="4" title="The real error is the basis set"
+        lede="STO-3G describes each atom with the bare minimum of functions. Bigger basis sets move the bond length from 0.91 Å to the true 0.774 Å. That error is about 100,000× larger than VQE's, so the quantum algorithm is not the bottleneck here."
+        codeTitle="Classical basis-set ladder" source={code('# 4a (cont.)')}>
+        <Chart title="Bond length vs basis set size" xLabel="spatial orbitals in the basis" yLabel="Bond length (Å)" height={260}
+          series={[{ name: 'FCI bond length per basis', points: pts(ladder, 'spatial_orbitals', 'r_eq_A'), color: C.vqe, kind: 'both' }]}
+          hRefs={[{ value: 0.7743, label: 'literature 0.774 Å', color: C.exact }]} />
+        <p class="small">{ladder.map((r) => `${BASIS_NAMES[String(r.basis)] ?? r.basis} ${num(r, 'r_eq_A').toFixed(3)} Å`).join(' · ')}. cc-pVQZ would need {num(qz, 'qubits_tapered')} qubits; classically it takes seconds.</p>
+        <h3>Optimisers under shot noise</h3>
+        <p class="small">On hardware every energy is a noisy estimate. Worst error from 6 noisy runs:</p>
+        <Bars title="Optimiser error under shot noise" unit="mHa" log ref={{ value: CHEM, label: 'chemical accuracy (1.6 mHa)' }}
+          bars={[
+            { label: 'SLSQP', value: worstNoisy('SLSQP'), color: C.raw, note: 'gradients drown in noise' },
+            { label: 'COBYLA', value: worstNoisy('COBYLA'), color: C.alt },
+            { label: 'SPSA', value: worstNoisy('SPSA'), color: C.exact, note: '600 evaluations' },
+          ]} />
+      </Section>
+
+      <Section id="compile" n="5" title="Fitting it onto a real chip"
+        lede="On IBM's heavy-hex chips, qubits only talk to neighbours, so circuits get rewritten. The tapered circuit compiles to a handful of gates; the 4-qubit version balloons. Then we pick the physical qubits with the best calibration."
+        codeTitle="Encoding × optimisation level" source={code('from qiskit_ibm_runtime.fake_provider import FakeFez')}>
+        <Bars title="Two-qubit gates after compilation" unit="CZ"
+          bars={[
+            { label: '4 qubits (JW)', value: gates('jw'), color: C.raw },
+            { label: '2 qubits (tapered)', value: gates('tapered'), color: C.exact },
+          ]} />
+        <Bars title="Energy error by qubit choice" unit="mHa"
+          bars={layout.map((r) => ({ label: String(r.layout), value: num(r, 'energy_error_mHa'), color: String(r.layout).startsWith('noise') ? C.exact : C.raw, note: String(r.physical_qubits) }))} />
+      </Section>
+
+      <Section id="noise" n="6" title="Removing noise by adding more"
+        lede="Zero-noise extrapolation: run the circuit with its noise deliberately tripled and quintupled, see how the error grows, and draw the line back to zero noise."
+        codeTitle="Noisy simulation + ZNE" source={code('from hardware_tools import zne_std')}>
+        <Chart title="Zero-noise extrapolation at 0.774 Å" xLabel="noise scale factor" yLabel="error vs exact (mHa)" height={250} xMin={0} yMin={0}
+          series={[
+            { name: 'measured', points: scales.map((s, i) => [s, zy[i]] as [number, number]), color: C.raw, kind: 'dots' },
+            { name: 'straight-line fit → zero noise', points: [[0, icpt], [5, icpt + 5 * slope]], color: C.zne, kind: 'dash' },
+          ]}
+          hRefs={[{ value: CHEM, label: 'chemical accuracy' }]} />
+        <Chart title="Noisy error along the curve" xLabel="He–H distance (Å)" yLabel="error (mHa)" height={230} yMin={0}
+          series={[
+            { name: 'raw noisy', points: pts(noisy, 'distance_A', 'noisy_err', 1e3), color: C.raw, kind: 'both' },
+            { name: 'after ZNE', points: pts(noisy, 'distance_A', 'zne_linear_err', 1e3), color: C.zne, kind: 'both' },
+          ]}
+          hRefs={[{ value: CHEM, label: 'chemical accuracy' }]} />
+      </Section>
+
+      <Section id="hardware" n="7" title="Real quantum hardware"
+        lede="All distances and noise levels go to the device as one job, with dynamical decoupling, Pauli twirling and readout correction switched on, then our own ZNE on top."
+        codeTitle="One-job hardware submission" source={code('import json')}>
+        {hardware.length ? (
+          <Chart title="Hardware error" xLabel="He–H distance (Å)" yLabel="error (mHa)" height={240}
+            series={[
+              { name: 'hardware raw', points: hardware.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_raw') - num(r, 'exact'))] as [number, number]), color: C.raw, kind: 'both' },
+              { name: 'hardware + ZNE', points: hardware.map((r) => [num(r, 'distance_A'), 1e3 * (num(r, 'hw_zne_linear') - num(r, 'exact'))] as [number, number]), color: C.zne, kind: 'both' },
+            ]}
+            hRefs={[{ value: CHEM, label: 'chemical accuracy' }]} />
+        ) : (
+          <div class="callout"><b>Results pending.</b> The pipeline is validated end-to-end in a local dry run; the device numbers land in the notebook when the job returns.</div>
+        )}
+      </Section>
+
+      <Section id="budget" n="8" title="Where the error comes from"
+        lede="Every error source at the equilibrium distance, side by side on a log scale. The algorithm is essentially perfect; noise costs a few mHa; the small basis costs far more than everything else together."
+        codeTitle="Error budget from results/*.csv" source={code('# ---- Error budget')}>
+        <Bars title="Error budget at equilibrium" unit="mHa" log ref={{ value: CHEM, label: 'chemical accuracy (1.6 mHa)' }}
+          bars={budget.flatMap((r) => {
+            const v = Math.abs(num(r, 'simulator_Ha')) || Math.abs(num(r, 'hardware_Ha'));
+            return Number.isFinite(v) && v > 0 ? [{ label: String(r.source).replace(/\s*\(.*\)$/, ''), value: 1e3 * v,
+              color: String(r.source).startsWith('Basis') ? C.raw : String(r.source).startsWith('Ansatz') ? C.exact : C.alt }] : [];
+          })} />
+      </Section>
+
+      <section class="outro wrap" data-reveal>
+        <p class="eyebrow">Takeaways</p>
+        <h2>Small molecule, honest numbers.</h2>
+        <ol>
+          <li><b>Symmetry first.</b> Removing two known qubits turned 45 two-qubit gates into 2, the difference between 121 mHa and 7.7 mHa of error.</li>
+          <li><b>VQE is exact when noiseless</b>, so the basis set, not the algorithm, limits accuracy.</li>
+          <li><b>Mitigation works, partly.</b> A good qubit choice and ZNE bring noise to 1.4–2.6 mHa, near chemical accuracy.</li>
+          <li><b>Shot noise is the next wall.</b> Optimising on hardware would need noise-robust optimisers such as SPSA and many more shots.</li>
+        </ol>
+        <p><a class="btn" href={NOTEBOOK}>Read the full notebook</a> <a class="btn ghost" href={REPO}>Source on GitHub</a></p>
+      </section>
+    </main>
+
+    <footer class="wrap foot">
+      Built on B. Tirado's <em>Ground-State Energy of a Molecule with VQE</em> tutorial (BasQ Qiskit Fall Fest 2026). Charts are drawn from the notebook's <code>results/*.csv</code>.
+    </footer>
+
+    <script>
+      const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (e.target.classList.add('is-in'), io.unobserve(e.target))), { rootMargin: '0px 0px -8% 0px' });
+      document.querySelectorAll('[data-reveal]').forEach((el) => io.observe(el));
+    </script>
+  </body>
+</html>

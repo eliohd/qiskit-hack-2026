@@ -1,0 +1,15 @@
+{
+  "name": "qiskit-pes-26",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "astro build && wrangler pages deploy dist --project-name qiskit-pes-26"
+  },
+  "dependencies": {
+    "astro": "^6.4.8"
+  }
+}

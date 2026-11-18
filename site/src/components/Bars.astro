@@ -1,0 +1,24 @@
+---
+// Horizontal bars. Log scale optional (for errors spanning many orders of magnitude).
+type Bar = { label: string; value: number; color?: string; note?: string };
+interface Props { bars: Bar[]; unit: string; log?: boolean; ref?: { value: number; label: string }; title: string }
+const { bars, unit, log = false, ref, title } = Astro.props;
+const vals = bars.map((b) => b.value).concat(ref ? [ref.value] : []);
+const lo = log ? Math.floor(Math.log10(Math.min(...vals))) : 0;
+const hi = log ? Math.ceil(Math.log10(Math.max(...vals))) : Math.max(...vals) * 1.05;
+const pct = (v: number) => (log ? ((Math.log10(v) - lo) / (hi - lo)) * 100 : (v / hi) * 100);
+const fmt = (v: number) => (v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toExponential(1).replace('e', '×10^'));
+---
+<figure class="bars" aria-label={title}>
+  {bars.map((b) => (
+    <div class="bar-row">
+      <span class="bar-label">{b.label}</span>
+      <span class="bar-track">
+        <span class="bar-fill" style={`width:${Math.max(pct(b.value), 1.5)}%;background:${b.color ?? 'var(--accent)'}`}></span>
+        {ref && <span class="bar-ref" style={`left:${pct(ref.value)}%`}></span>}
+      </span>
+      <span class="bar-value">{fmt(b.value)} {unit}{b.note && <em> {b.note}</em>}</span>
+    </div>
+  ))}
+  {ref && <figcaption class="bar-caption"><i class="ref-swatch"></i>{ref.label}{log && ' · log scale'}</figcaption>}
+</figure>
