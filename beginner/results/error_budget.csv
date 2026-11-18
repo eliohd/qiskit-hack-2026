@@ -1,0 +1,6 @@
+source,simulator_Ha,hardware_Ha,evidence
+Basis set (6-31G − STO-3G exact),-0.08089199512949552,,Section 4
+"Ansatz / optimiser (VQE − exact, noiseless)",5.195925734113871e-08,,Section 3
+"Shot noise (std of one energy, 32768 shots)",0.0,0.00460606974914947,Section 7
+Gate + readout noise (raw − noiseless VQE),0.007727737566834314,,Sections 6 / 7
+Residual after ZNE (ZNE linear − exact),0.0021243422468626427,,Sections 6 / 7

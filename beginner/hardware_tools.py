@@ -167,3 +167,47 @@ def runtime_estimator(backend, twirling: bool = True, dd: bool = True,
     est.options.twirling.enable_gates = twirling
     est.options.twirling.enable_measure = twirling
     return est
+
+
+def zne_std(scales, stds, order: int = 1) -> float:
+    """Error bar of the ZNE value. The extrapolated energy is a weighted sum of the
+    measured energies, so its std is sqrt(sum (w_i * std_i)^2). For scales (1, 3, 5)
+    that is 1.21x the per-circuit std (linear) or 2.28x (quadratic)."""
+    X = np.vander(np.asarray(scales, float), order + 1)
+    weights = np.linalg.pinv(X)[-1]  # least-squares weights for the value at scale 0
+    return float(np.sqrt(np.sum((weights * np.asarray(stds, float)) ** 2)))
+
+
+# ---------------------------------------------------------------- hardware runs
+def build_hardware_pubs(distances, scales, backend, n_seeds: int = 20):
+    """One PUB per (distance, scale), noise-aware layout on THIS backend."""
+    pubs, meta = [], []
+    for d in distances:
+        pp = prepare_point(d, mapping="tapered")
+        best = best_transpile(pp.circuit, backend, n_seeds=n_seeds)
+        for s in scales:
+            c = fold_two_qubit_gates(best["isa"], s)
+            pubs.append((c, pp.qubit_op.apply_layout(c.layout)))
+            meta.append({"distance_A": d, "scale": s, "physical_qubits": best["physical_qubits"],
+                         "exact": pp.e_exact, "vqe_noiseless": pp.e_vqe,
+                         "nuclear_repulsion": pp.nuclear_repulsion})
+    return pubs, meta
+
+
+def hardware_table(result, meta, scales, backend_name: str, job_id: str):
+    """Turn an Estimator result into one row per distance (raw + ZNE, with error bars)."""
+    import pandas as pd
+    rows = []
+    for d in dict.fromkeys(m["distance_A"] for m in meta):
+        idx = [i for i, m in enumerate(meta) if m["distance_A"] == d]
+        E = np.array([float(result[i].data.evs) for i in idx]) + meta[idx[0]]["nuclear_repulsion"]
+        sd = np.array([float(result[i].data.stds) for i in idx])
+        m = meta[idx[0]]
+        rows.append({"distance_A": d, "exact": m["exact"], "vqe_noiseless": m["vqe_noiseless"],
+                     "hw_raw": E[0], "hw_raw_std": sd[0],
+                     "hw_zne_linear": zne_extrapolate(scales, E, 1), "hw_zne_linear_std": zne_std(scales, sd, 1),
+                     "hw_zne_quad": zne_extrapolate(scales, E, 2), "hw_zne_quad_std": zne_std(scales, sd, 2),
+                     "physical_qubits": str(m["physical_qubits"]), "backend": backend_name, "job_id": job_id,
+                     **{f"scale_{s}": e for s, e in zip(scales, E)},
+                     **{f"std_{s}": e for s, e in zip(scales, sd)}})
+    return pd.DataFrame(rows)
